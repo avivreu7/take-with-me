@@ -1,112 +1,102 @@
 // src/app/checklist/[id]/page.tsx
-'use client'
+'use client' // זהו קובץ קומפוננטת לקוח
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation' // הוספת ייבוא של useRouter
-// ייבוא הפונקציה ליצירת לקוח קליינט - ודא שזה מ-@supabase/auth-helpers-nextjs
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-
-import confetti from 'canvas-confetti'
+import { useEffect, useState } from 'react';
+import Link from 'next/link'; // ייבוא Link
+import { useParams, useRouter } from 'next/navigation';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import confetti from 'canvas-confetti';
 
 type Item = {
-  id: string
-  name: string
-  category: string
-  is_checked?: boolean
-  user_id: string
+  id: string;
+  name: string;
+  category: string;
+  is_checked?: boolean;
+  user_id: string;
   // family_id?: string
 }
 
-export default function ChecklistPage() {
-  const { id } = useParams()
-  const router = useRouter() // אתחול ה-router
-  const [userId, setUserId] = useState<string | null>(null)
-  const [listItems, setListItems] = useState<Item[]>([])
-  const [inventoryItems, setInventoryItems] = useState<Item[]>([])
-  const [selectedItems, setSelectedItems] = useState<string[]>([])
-  const [resetMessage, setResetMessage] = useState(false)
-  const [allPacked, setAllPacked] = useState(false)
-  const [loading, setLoading] = useState(true)
+export default function ChecklistPage() { // חזרנו לשם המקורי של הקומפוננטה
+  const { id } = useParams();
+  const router = useRouter();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [listItems, setListItems] = useState<Item[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<Item[]>([]);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [resetMessage, setResetMessage] = useState(false);
+  const [allPacked, setAllPacked] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // יצירת לקוח Supabase המיועד לשימוש בקומפוננטות קליינט - ודא שזה מ-@supabase/auth-helpers-nextjs
   const supabase = createClientComponentClient();
 
-  // טען מזהה משתמש
   useEffect(() => {
     const getUser = async () => {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError) {
           console.error("שגיאה בקבלת משתמש:", userError.message);
       }
-      if (user) setUserId(user.id);
-        else setLoading(false); // אם אין משתמש, סיים טעינה
-    }
+      if (user) {
+        setUserId(user.id);
+      } else {
+        setLoading(false);
+      }
+    };
     getUser();
   }, [supabase]);
 
-
-  // טען את הפריטים של הצ'קליסט (תלוי ב-id ו-userId)
   useEffect(() => {
     const fetchChecklist = async () => {
-      if (!userId || !id) return;
-
+      if (!userId || !id) {
+        if (!userId && !id) setLoading(false);
+        return;
+      }
+      setLoading(true);
       const { data, error } = await supabase
         .from('items')
         .select('*')
         .eq('list_id', id)
         .eq('user_id', userId);
-
       if (error) {
         console.error('שגיאה בטעינת פריטי צ\'קליסט:', error.message);
       } else {
         setListItems(data || []);
       }
+      // setLoading(false); // הטעינה תסתיים אחרי טעינת ה-inventory
+    };
+    if (userId && id) {
+        fetchChecklist();
     }
-
-    fetchChecklist();
   }, [id, userId, supabase]);
 
-
-  // טען את הציוד הכללי (תלוי ב-userId)
   useEffect(() => {
     const fetchInventory = async () => {
       if (!userId) {
-          setInventoryItems([]);
-          setLoading(false);
-          return;
+        setInventoryItems([]);
+        // setLoading(false); // נטפל באופן כללי
+        return;
       }
-
-      // הקפד לבדוק את שם הטבלה הנכון. בדוגמה השתמשת ב-'inventory'
+      // setLoading(true); // אם לא נטען
       const { data, error } = await supabase
-        .from('inventory') // ודא ששם הטבלה נכון
+        .from('inventory')
         .select('id, name, category, user_id');
-
       if (error) {
         console.error('שגיאה בטעינת ציוד כללי:', error.message);
-        setLoading(false);
       } else {
         setInventoryItems(data || []);
-        setLoading(false);
       }
-    }
-    
-    if (userId) { // בצע קריאה רק אם יש userId
-        fetchInventory();
+      setLoading(false); // סיום טעינה כוללת
+    };
+
+    if (userId) {
+      fetchInventory();
     } else {
-        // אם אין userId, אפשר להחליט אם להציג הודעת טעינה או הודעה אחרת
-        // כאן אני מניח שאם אין userId, אין מה לטעון מה-inventory עדיין.
-        setLoading(false); // לדוגמה, אם אין משתמש, אין טעם לטעון inventory עד שהוא יתחבר
-        // אם אתה רוצה להציג loading עד ש-userId יתקבל, השאר את setLoading(true) או שנה לוגיקה בהתאם
+      if (!id) setLoading(false);
     }
+  }, [userId, supabase, id]);
 
-  }, [userId, supabase]);
-
-
-  // אנימציית קונפטי - תלויה רק ב-listItems
   useEffect(() => {
     const allChecked = listItems.length > 0 && listItems.every((item) => item.is_checked);
     setAllPacked(allChecked);
-
     if (allChecked) {
       confetti({
         particleCount: 150,
@@ -116,17 +106,13 @@ export default function ChecklistPage() {
     }
   }, [listItems]);
 
-
-  // --- פונקציות שמטפלות בשינויים מול ה-Supabase ---
-
   const toggleItem = async (itemId: string, isChecked: boolean) => {
-      if (!userId) return;
+    if (!userId) return;
     const { error } = await supabase
       .from('items')
       .update({ is_checked: !isChecked })
       .eq('id', itemId)
       .eq('user_id', userId);
-
     if (error) {
       console.error('שגיאה בעדכון פריט:', error.message);
     } else {
@@ -139,10 +125,10 @@ export default function ChecklistPage() {
   };
 
   const deleteItem = async (itemId: string) => {
-      if (!userId) return;
-      if (!confirm("האם את בטוחה שברצונך למחוק פריט זה מהצ'קליסט?")) {
-          return;
-      }
+    if (!userId) return;
+    if (!confirm("האם את בטוחה שברצונך למחוק פריט זה מהצ'קליסט?")) {
+        return;
+    }
     const { error } = await supabase.from('items').delete().eq('id', itemId).eq('user_id', userId);
     if (error) {
       console.error('שגיאה במחיקת פריט צ\'קליסט:', error.message);
@@ -157,21 +143,17 @@ export default function ChecklistPage() {
         return;
     }
     const itemsToAdd = inventoryItems.filter((item) => selectedIds.includes(item.id));
-
     const insertPayload = itemsToAdd.map((item) => ({
       name: item.name,
       category: item.category,
-      list_id: id, // ודא ששם העמודה הוא list_id בטבלת items
+      list_id: id,
       is_checked: false,
       user_id: userId,
-      // family_id: user?.user_metadata?.family_id ?? null, // אם אתה צריך את זה, ודא שיש לך גישה ל-user object
     }));
-
     if (insertPayload.length === 0) {
           console.log("No valid items selected to add.");
           return;
     }
-
     const { data: newChecklistItems, error } = await supabase.from('items').insert(insertPayload).select('*');
     if (error) {
       console.error('שגיאה בהוספת פריטים לצ\'קליסט:', error.message);
@@ -186,16 +168,15 @@ export default function ChecklistPage() {
   };
 
   const resetChecklist = async () => {
-      if (!userId || !id) return;
-      if (!confirm("האם את בטוחה שברצונך לאפס את כל הפריטים בצ'קליסט?")) {
-          return;
-      }
+    if (!userId || !id) return;
+    if (!confirm("האם את בטוחה שברצונך לאפס את כל הפריטים בצ'קליסט?")) {
+        return;
+    }
     const { error } = await supabase
       .from('items')
       .update({ is_checked: false })
       .eq('list_id', id)
       .eq('user_id', userId);
-
     if (!error) {
       setListItems((prev) =>
         prev.map((item) => ({ ...item, is_checked: false }))
@@ -214,26 +195,28 @@ export default function ChecklistPage() {
     );
   };
 
-  // קבלת קטגוריות ייחודיות מרשימת הציוד הכללי (inventoryItems)
-  // המיון נעשה ישירות לפני השימוש ב-JSX כדי לשמור על סדר עקבי
   const uniqueInventoryCategories = Array.from(
     new Set(inventoryItems.map((item) => item.category))
   );
-  // אין צורך למיין כאן אם אתה ממיין בתוך ה-JSX
 
-  // קבלת קטגוריות ייחודיות מפריטי הצ'קליסט הנוכחיים (listItems)
   const uniqueChecklistCategories = Array.from(
     new Set(listItems.map((item) => item.category))
   );
-  // ניתן למיין גם כאן אם רוצים סדר קבוע לקטגוריות בצ'קליסט
 
+  if (loading) {
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+            <p className="text-xl text-gray-600">טוען רשימת ציוד...</p>
+        </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-pink-100 via-blue-100 to-indigo-100 p-4 text-right">
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="bg-white shadow-xl rounded-3xl p-4 text-center relative">
           <button
-            onClick={() => router.push('/home')} // כאן router מוגדר
+            onClick={() => router.push('/home')}
             className="text-sm text-blue-600 underline absolute top-2 right-2"
           >
             חזרה לדף הבית
@@ -253,11 +236,9 @@ export default function ChecklistPage() {
           </div>
         )}
 
-        {/* הצגת פריטי הצ'קליסט הנוכחיים */}
-        {/* הצג חלק זה רק אם יש פריטים בצ'קליסט או אם עדיין טוען */}
         {(uniqueChecklistCategories.length > 0 || (listItems.length === 0 && loading)) && (
             <div className="space-y-6">
-                {uniqueChecklistCategories.sort().map((category) => ( // מיון קטגוריות הצ'קליסט
+                {uniqueChecklistCategories.sort().map((category) => (
                     <div key={category} className="bg-white shadow-lg rounded-3xl p-6">
                         <h2 className="text-lg font-semibold text-pink-500 mb-4">{category}</h2>
                         <ul className="space-y-3">
@@ -296,10 +277,9 @@ export default function ChecklistPage() {
                 ))}
             </div>
        )}
-        {/* הודעה אם אין פריטים בצ'קליסט */}
-        {uniqueChecklistCategories.length === 0 && !loading && listItems.length === 0 && ( // הצג רק אם אין פריטים וסיימנו לטעון
+        {uniqueChecklistCategories.length === 0 && !loading && listItems.length === 0 && (
              <div className="text-center text-gray-600">
-                 אין כרגע פריטים ברשימת הצ'קליסט זו.
+                 אין כרגע פריטים ברשימת הצ&apos;קליסט זו.
              </div>
         )}
 
@@ -312,14 +292,12 @@ export default function ChecklistPage() {
           </button>
         </div>
 
-       {/* חלק הוספת פריטים מהרשימה הכללית */}
-       {/* הצג חלק זה רק אם יש פריטים ב-inventoryItems או אם עדיין טוען */}
-       {(inventoryItems.length > 0 || loading) && (
+       <div>
             <div className="bg-white shadow-lg rounded-3xl p-6">
                 <h2 className="text-lg font-semibold text-pink-500 mb-4">בחרי פריטים מהרשימה הכללית:</h2>
-                {loading && userId ? ( // הצג טעינה רק אם יש userId ואנחנו באמת טוענים inventory
+                {loading && !inventoryItems.length ? (
                     <p className="text-center text-gray-500">טוען ציוד כללי...</p>
-                ) : (
+                ) : inventoryItems.length > 0 ? (
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
@@ -327,8 +305,7 @@ export default function ChecklistPage() {
                         }}
                         className="space-y-6"
                     >
-                        {/* מיון קטגוריות הציוד הכללי לפי סדר אלפביתי */}
-                        {uniqueInventoryCategories.sort().map((category) => ( // מיון כאן
+                        {uniqueInventoryCategories.sort().map((category) => (
                             <div key={category}>
                                 <h3 className="text-sm font-bold text-gray-600 mb-2">{category}</h3>
                                 <div className="grid grid-cols-2 gap-2">
@@ -356,18 +333,15 @@ export default function ChecklistPage() {
                             הוסיפי לרשימה ({selectedItems.length})
                         </button>
                     </form>
+                ) : !loading && inventoryItems.length === 0 && (
+                    <div className="text-center text-gray-600">
+                        אין כרגע פריטים ברשימת הציוד הכללית עבורך. אנא הוסיפי פריטים{' '}
+                        <Link href="/inventory" className="text-blue-600 underline">כאן</Link>.
+                    </div>
                 )}
             </div>
-       )}
-        {/* הודעה אם אין פריטים ברשימה הכללית לאחר סיום הטעינה */}
-        {inventoryItems.length === 0 && !loading && ( // הצג רק אם אין פריטים וסיימנו לטעון
-             <div className="text-center text-gray-600">
-                 אין כרגע פריטים ברשימת הציוד הכללית עבורך. אנא הוסיפי פריטים{' '}
-                 <a href="/inventory" className="text-blue-600 underline">כאן</a>.
-             </div>
-        )}
-
+       </div>
       </div>
     </div>
-  )
+  );
 }
